@@ -1,11 +1,10 @@
-import React from 'react'
+import BlogForm from '@/components/BlogForm';
 
-const page = () => {
+export default function HomePage() {
   return (
-    <div>
-      Homepage
-    </div>
-  )
+    <main className="p-10 max-w-xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">🧠 Blog Summarizer</h1>
+      <BlogForm />
+    </main>
+  );
 }
-
-export default page

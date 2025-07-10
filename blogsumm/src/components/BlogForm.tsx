@@ -1,33 +1,102 @@
-'use client';
+import puppeteer from 'puppeteer';
+import { connectMongo } from '@/lib/mongo';
+import { supabase } from '@/lib/supabase';
+import mongoose from 'mongoose';
 
-import { useState } from 'react';
+const BlogSchema = new mongoose.Schema({
+  url: String,
+  fullText: String,
+});
+const Blog = mongoose.models.Blog || mongoose.model('Blog', BlogSchema);
 
-export default function BlogForm() {
-  const [url, setUrl] = useState('');
-  const [summary, setSummary] = useState('');
+// Puppeteer-based scraping
+export async function realScrape(url: string): Promise<{ title: string; text: string }> {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
 
-  const handleSubmit = async () => {
-    const res = await fetch('/api/summarize', {
-      method: 'POST',
-      body: JSON.stringify({ url }),
-    });
-    const data = await res.json();
-    setSummary(data.summary);
-  };
+  const page = await browser.newPage();
+  await page.goto(url, {
+    waitUntil: 'networkidle2',
+    timeout: 0,
+  });
 
-  return (
-    <div className="space-y-4">
-      <input
-        type="text"
-        placeholder="Enter blog URL"
-        className="border p-2 w-full"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
-      <button onClick={handleSubmit} className="bg-black text-white px-4 py-2 rounded">
-        Summarize
-      </button>
-      {summary && <div className="mt-4">{summary}</div>}
-    </div>
-  );
+  // ✅ Wait for the actual blog container to appear
+  await page.waitForSelector('.crayons-article__main'); // the main blog content wrapper
+
+  // 🔍 Pull blog title and text with spacing
+  const result = await page.evaluate(() => {
+    const title = document.querySelector('h1')?.innerText || 'Untitled';
+
+    const container = document.querySelector('.crayons-article__main');
+    if (!container) return { title: 'No title', text: 'No content' };
+
+    const paragraphs = container.querySelectorAll('p, li');
+    const text = Array.from(paragraphs)
+      .map(el => (el as HTMLElement).innerText.trim())
+      .filter(Boolean)
+      .join('\n\n');
+
+    return { title, text };
+  });
+
+  await browser.close();
+
+  return result;
+}
+
+function staticSummary(text: string) {
+  return `Summary: ${text.slice(0, 300)}...`;
+}
+
+function simulateUrduTranslation(text: string) {
+  return `اردو خلاصہ: ${text.slice(0, 150)}...`;
+}
+
+function wordCount(text: string): number {
+  return text.trim().split(/\s+/).length;
+}
+
+function compressionRatio(original: string, summary: string): number {
+  return summary.length / original.length;
+}
+
+export async function POST(req: Request) {
+  try {
+    const { url } = await req.json();
+    if (!url) {
+      return new Response(JSON.stringify({ error: 'No URL provided' }), { status: 400 });
+    }
+
+    const { title, text: fullText } = await realScrape(url);
+    const summary = staticSummary(fullText);
+    const urdu_summary = simulateUrduTranslation(summary);
+    const words = wordCount(fullText);
+    const ratio = compressionRatio(fullText, summary);
+
+    await connectMongo();
+    await Blog.create({ url, fullText });
+
+    const { error: insertError } = await supabase.from('summaries').insert([
+      {
+        url,
+        title,
+        summary,
+        urdu_summary,
+        word_count: words,
+        compression_ratio: ratio,
+      },
+    ]);
+
+    if (insertError) {
+      console.error('Supabase insert error:', insertError.message);
+      return new Response(JSON.stringify({ error: insertError.message }), { status: 500 });
+    }
+
+    return new Response(JSON.stringify({ summary }), { status: 200 });
+  } catch (err: any) {
+    console.error('API error:', err.message || err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
+  }
 }

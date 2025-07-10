@@ -1,6 +1,8 @@
 import { connectMongo } from '@/lib/mongo';
 import { supabase } from '@/lib/supabase';
 import mongoose from 'mongoose';
+import * as cheerio from 'cheerio';
+import urduDictionary from '@/lib/UrduDictionary';
 
 const BlogSchema = new mongoose.Schema({
   url: String,
@@ -8,16 +10,41 @@ const BlogSchema = new mongoose.Schema({
 });
 const Blog = mongoose.models.Blog || mongoose.model('Blog', BlogSchema);
 
-function fakeScrape(url: string) {
-  return `This is the full content from ${url}. It has multiple sentences. Let's assume this is 2000 words long for testing.`;
+
+
+async function realScrape(url: string): Promise<string> {
+  try {
+    const res = await fetch(url);
+    const html = await res.text();
+
+    const $ = cheerio.load(html);
+
+    // Extract all text inside <p> tags
+    const text = $('p')
+      .map((_, el) => $(el).text())
+      .get()
+      .join('\n');
+
+    return text || 'No readable content found.';
+  } catch (err) {
+    console.error('Error scraping blog:', err);
+    return 'Error fetching blog content.';
+  }
 }
+
 
 function staticSummary(text: string) {
   return `Summary: ${text.slice(0, 100)}...`;
 }
 
-function simulateUrduTranslation(text: string) {
-  return `اردو خلاصہ: ${text.slice(0, 50)}...`;
+function UrduTranslation(text: string) : string {
+  return text
+  .split(/\s+/)
+  .map((word)=>{
+    const cleaned=word.toLowerCase().replace(/[.,!?;:]/g, '');
+    return urduDictionary[cleaned] || cleaned;
+  })
+  .join(' ');
 }
 
 function wordCount(text: string): number {
@@ -31,9 +58,9 @@ function compressionRatio(original: string, summary: string): number {
 export async function POST(req: Request) {
   try {
     const { url } = await req.json();
-    const fullText = fakeScrape(url);
+    const fullText = await realScrape(url);
     const summary = staticSummary(fullText);
-    const urdu_summary = simulateUrduTranslation(summary);
+    const urdu_summary = UrduTranslation(summary);
     const title = `Summary of ${url.split('/').at(-1) || 'Blog'}`;
     const words = wordCount(fullText);
     const ratio = compressionRatio(fullText, summary);

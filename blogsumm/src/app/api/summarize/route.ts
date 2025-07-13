@@ -3,11 +3,12 @@ import { supabase } from '@/lib/supabase';
 import mongoose from 'mongoose';
 import * as cheerio from 'cheerio';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { assert, error } from 'node:console';
 
-// Initialize Gemini AI
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Mongo schema
+
 const BlogSchema = new mongoose.Schema({
   url: String,
   fullText: String,
@@ -16,7 +17,7 @@ const BlogSchema = new mongoose.Schema({
 });
 const Blog = mongoose.models.Blog || mongoose.model('Blog', BlogSchema);
 
-// Retry mechanism with exponential backoff
+
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
@@ -25,7 +26,8 @@ async function retryWithBackoff<T>(
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       console.error(`Attempt ${i + 1} failed:`, error.message);
       
       if (i === maxRetries - 1) throw error;
@@ -94,14 +96,14 @@ async function realScrape(url: string): Promise<{ text: string; title: string }>
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // Extract title
+ 
     const title =
       $('h1').first().text().trim() ||
       $('title').text().trim() ||
       $('meta[property="og:title"]').attr('content') ||
       'Untitled Blog';
 
-    // Extract content with better selectors
+
     const selectors = [
       'article p',
       '.post-content p',
@@ -130,8 +132,9 @@ async function realScrape(url: string): Promise<{ text: string; title: string }>
     }
 
     return { text: 'No readable content found.', title };
-  } catch (err: any) {
-    console.error('Scraping error:', err);
+  } catch (err) {
+    const error=err as Error;
+    console.error('Scraping error:', error);
     return { text: 'Error fetching blog content.', title: 'Error' };
   }
 }
@@ -156,9 +159,10 @@ async function generateWithGemini(prompt: string): Promise<string> {
     }
     
     return text.trim();
-  } catch (error: any) {
-    console.error('Gemini generation error:', error);
-    throw error;
+  } catch (err) {
+    const error=err as Error;
+    console.error('Gemini generation error:', err);
+    throw err;
   }
 }
 
@@ -194,7 +198,8 @@ ${contentToSummarize}`;
     console.log('Gemini summary generated successfully, length:', summary.length);
     return summary;
     
-  } catch (error: any) {
+  } catch (err) {
+    const error=err as Error;
     console.error('Gemini summary generation failed:', error.message);
     console.log('Falling back to extractive summary...');
     return extractiveSummary(contentToSummarize, 5);
@@ -229,7 +234,8 @@ ${text}`;
     console.log('Gemini Urdu translation completed successfully');
     return urduTranslation;
     
-  } catch (error: any) {
+  } catch (err) {
+    const error=err as Error;
     console.error('Gemini Urdu translation failed:', error.message);
     
 

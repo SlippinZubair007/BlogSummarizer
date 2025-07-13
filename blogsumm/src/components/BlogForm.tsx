@@ -9,7 +9,7 @@ const BlogSchema = new mongoose.Schema({
 });
 const Blog = mongoose.models.Blog || mongoose.model('Blog', BlogSchema);
 
-// Puppeteer-based scraping
+
 export async function realScrape(url: string): Promise<{ title: string; text: string }> {
   const browser = await puppeteer.launch({
     headless: true,
@@ -22,10 +22,9 @@ export async function realScrape(url: string): Promise<{ title: string; text: st
     timeout: 0,
   });
 
-  // ✅ Wait for the actual blog container to appear
-  await page.waitForSelector('.crayons-article__main'); // the main blog content wrapper
 
-  // 🔍 Pull blog title and text with spacing
+  await page.waitForSelector('.crayons-article__main'); 
+
   const result = await page.evaluate(() => {
     const title = document.querySelector('h1')?.innerText || 'Untitled';
 
@@ -62,7 +61,7 @@ function compressionRatio(original: string, summary: string): number {
   return summary.length / original.length;
 }
 
-export async function POST(req: Request) {
+
   try {
     const { url } = await req.json();
     if (!url) {
@@ -98,5 +97,44 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error('API error:', err.message || err);
     return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
+  }export async function POST(req: Request) {
+  try {
+    const { url } = await req.json();
+    if (!url) {
+      return new Response(JSON.stringify({ error: 'No URL provided' }), { status: 400 });
+    }
+
+    const { title, text: fullText } = await realScrape(url);
+    const summary = staticSummary(fullText);
+    const urdu_summary = simulateUrduTranslation(summary);
+    const words = wordCount(fullText);
+    const ratio = compressionRatio(fullText, summary);
+
+    await connectMongo();
+    await Blog.create({ url, fullText });
+
+    const { error: insertError } = await supabase.from('summaries').insert([
+      {
+        url,
+        title,
+        summary,
+        urdu_summary,
+        word_count: words,
+        compression_ratio: ratio,
+      },
+    ]);
+
+    if (insertError) {
+      console.error('Supabase insert error:', insertError.message);
+      return new Response(JSON.stringify({ error: insertError.message }), { status: 500 });
+    }
+
+    return new Response(JSON.stringify({ summary }), { status: 200 });
+
+  } catch (err) {
+    const error = err as Error;
+    console.error('API error:', error.message || error);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
   }
 }
+

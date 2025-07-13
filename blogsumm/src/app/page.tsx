@@ -2,11 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Zap, Brain, ChevronRight, Globe, Users, TrendingUp, FileText, Languages, Hash } from 'lucide-react';
 
-// Enhanced BlogForm component with summary display
+type SummaryData = {
+  summary: string;
+  urdu_summary: string;
+  word_count: number;
+  title: string;
+  url: string;
+};
+
 const BlogForm = () => {
   const [topic, setTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [summaryData, setSummaryData] = useState(null);
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [showUrdu, setShowUrdu] = useState(false);
 
   const handleSubmit = async () => {
@@ -25,7 +32,6 @@ const BlogForm = () => {
       const data = await res.json();
 
       if (res.ok) {
-        // Simulate the response structure based on your API
         setSummaryData({
           summary: data.summary,
           urdu_summary: data.urdu_summary || "اردو خلاصہ دستیاب نہیں",
@@ -293,10 +299,6 @@ export default function HomePage() {
                 <h1 className="text-6xl md:text-8xl font-bold mb-6 bg-gradient-to-r from-green-400 via-emerald-400 to-green-400 bg-clip-text text-transparent leading-tight">
                   Summarize
                   <br />
-                  <span className="relative">
-                    Any Blog
-                    <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transform scale-x-0 animate-pulse"></div>
-                  </span>
                 </h1>
               </FloatingElement>
               

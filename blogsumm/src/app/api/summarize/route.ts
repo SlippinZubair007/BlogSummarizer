@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import mongoose from 'mongoose';
 import * as cheerio from 'cheerio';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { assert, error } from 'node:console';
+
 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -161,7 +161,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
     return text.trim();
   } catch (err) {
     const error=err as Error;
-    console.error('Gemini generation error:', err);
+    console.error('Gemini generation error:', error);
     throw err;
   }
 }
@@ -307,7 +307,8 @@ export async function POST(req: Request) {
         createdAt: new Date() 
       });
       console.log('Saved to MongoDB successfully');
-    } catch (mongoError: any) {
+    } catch (err) {
+      const mongoError = err as Error;
       console.error('MongoDB save error:', mongoError.message);
 
     }
